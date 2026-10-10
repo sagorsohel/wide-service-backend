@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes.js";
 import serviceRoutes from "./routes/service.routes.js";
+import { seedDatabase } from "./db/seed.js";
 
 dotenv.config();
 
@@ -41,7 +42,11 @@ app.get("/", (req, res) => {
   res.send("Wide Service Backend API is running!");
 });
 
-// Start Server
+// Auto seed on boot and start server
+seedDatabase().catch((err) => {
+  console.warn("[backend] Auto-seed note:", err.message);
+});
+
 app.listen(PORT, () => {
   console.log(`[wide-service-backend] Server is running on http://localhost:${PORT}`);
   console.log(`[wide-service-backend] Database target: ${process.env.DB_USER}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);

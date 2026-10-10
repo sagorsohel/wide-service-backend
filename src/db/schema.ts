@@ -1,18 +1,19 @@
-import { mysqlTable, serial, varchar, text, decimal, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
+import { mysqlTable, serial, int, varchar, text, decimal, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull().unique(),
+  name: varchar("name", { length: 191 }).notNull(),
+  phone: varchar("phone", { length: 20 }).notNull().unique(),
+  email: varchar("email", { length: 191 }).unique(),
   password: varchar("password", { length: 255 }).notNull(),
-  role: mysqlEnum("role", ["admin", "staff", "customer"]).default("customer").notNull(),
+  role: mysqlEnum("role", ["superadmin", "creator", "admin", "staff", "customer"]).default("customer").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export const services = mysqlTable("services", {
   id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
+  title: varchar("title", { length: 191 }).notNull(),
   description: text("description"),
   category: varchar("category", { length: 100 }).notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
@@ -24,8 +25,8 @@ export const services = mysqlTable("services", {
 
 export const bookings = mysqlTable("bookings", {
   id: serial("id").primaryKey(),
-  userId: serial("user_id").notNull(),
-  serviceId: serial("service_id").notNull(),
+  userId: int("user_id").notNull(),
+  serviceId: int("service_id").notNull(),
   bookingDate: timestamp("booking_date").notNull(),
   status: mysqlEnum("status", ["pending", "confirmed", "completed", "cancelled"]).default("pending").notNull(),
   notes: text("notes"),

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { AuthenticatedRequest } from "../middleware/auth.js";
@@ -10,25 +10,32 @@ const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_blog_post_202
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, phone, email, password, role } = req.body;
 
-    if (!name || !email || !password) {
-      res.status(400).json({ success: false, message: "Name, email and password are required" });
+    if (!name || !phone || !password) {
+      res.status(400).json({ success: false, message: "Name, phone and password are required" });
       return;
     }
 
-    const existingUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const existingUsers = await db
+      .select()
+      .from(users)
+      .where(or(eq(users.phone, phone), email ? eq(users.email, email) : undefined))
+      .limit(1);
+
     if (existingUsers.length > 0) {
-      res.status(409).json({ success: false, message: "User with this email already exists" });
+      res.status(409).json({ success: false, message: "User with this phone or email already exists" });
       return;
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const assignedRole = role === "admin" ? "admin" : role === "staff" ? "staff" : "customer";
+    const validRoles = ["superadmin", "creator", "admin", "staff", "customer"];
+    const assignedRole = validRoles.includes(role) ? role : "customer";
 
     const insertResult = await db.insert(users).values({
       name,
-      email,
+      phone,
+      email: email || null,
       password: hashedPassword,
       role: assignedRole,
     });
@@ -36,7 +43,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const newUserId = insertResult[0].insertId;
 
     const token = jwt.sign(
-      { id: newUserId, email, role: assignedRole },
+      { id: newUserId, phone, role: assignedRole },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -47,6 +54,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       data: {
         id: newUserId,
         name,
+        phone,
         email,
         role: assignedRole,
         token,
@@ -59,28 +67,35 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    const { phone, email, identifier, password } = req.body;
+    const loginIdentifier = phone || email || identifier;
 
-    if (!email || !password) {
-      res.status(400).json({ success: false, message: "Email and password are required" });
+    if (!loginIdentifier || !password) {
+      res.status(400).json({ success: false, message: "Phone/Email and password are required" });
       return;
     }
 
-    const existingUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    // Match either phone or email
+    const existingUsers = await db
+      .select()
+      .from(users)
+      .where(or(eq(users.phone, loginIdentifier), eq(users.email, loginIdentifier)))
+      .limit(1);
+
     if (existingUsers.length === 0) {
-      res.status(401).json({ success: false, message: "Invalid email or password" });
+      res.status(401).json({ success: false, message: "Invalid phone number or password" });
       return;
     }
 
     const user = existingUsers[0];
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      res.status(401).json({ success: false, message: "Invalid email or password" });
+      res.status(401).json({ success: false, message: "Invalid phone number or password" });
       return;
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, phone: user.phone, role: user.role },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -91,6 +106,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       data: {
         id: user.id,
         name: user.name,
+        phone: user.phone,
         email: user.email,
         role: user.role,
         token,
@@ -108,13 +124,18 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
       return;
     }
 
-    const userList = await db.select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      createdAt: users.createdAt,
-    }).from(users).where(eq(users.id, req.user.id)).limit(1);
+    const userList = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        phone: users.phone,
+        email: users.email,
+        role: users.role,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, req.user.id))
+      .limit(1);
 
     if (userList.length === 0) {
       res.status(404).json({ success: false, message: "User not found" });
