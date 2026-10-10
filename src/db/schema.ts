@@ -30,12 +30,18 @@ export const subcategories = mysqlTable("subcategories", {
 
 export const services = mysqlTable("services", {
   id: serial("id").primaryKey(),
-  title: varchar("title", { length: 191 }).notNull(),
+  name: varchar("name", { length: 191 }).notNull(),
+  businessName: varchar("business_name", { length: 191 }).notNull(),
+  logo: varchar("logo", { length: 500 }),
+  address: text("address").notNull(),
+  phone: varchar("phone", { length: 50 }).notNull(),
+  whatsapp: varchar("whatsapp", { length: 50 }),
+  images: text("images"),
+  categoryId: int("category_id").notNull(),
+  subcategoryId: int("subcategory_id"),
   description: text("description"),
-  category: varchar("category", { length: 100 }).notNull(),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  imageUrl: varchar("image_url", { length: 500 }),
   status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+  userId: int("user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });

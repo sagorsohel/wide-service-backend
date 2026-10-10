@@ -62,3 +62,22 @@ export const requireAdmin = (
   }
   next();
 };
+
+export const requireSuperAdminOrCreator = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (
+    !req.user ||
+    (req.user.role !== "superadmin" && req.user.role !== "creator" && req.user.role !== "admin")
+  ) {
+    res.status(403).json({
+      success: false,
+      message: "Forbidden: Super Admin or Creator role required",
+    });
+    return;
+  }
+  next();
+};
+

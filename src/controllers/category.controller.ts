@@ -1,19 +1,67 @@
 import { Request, Response } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, like, count } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { categories } from "../db/schema.js";
 
-// GET /api/categories - Read all categories
+// GET /api/categories - Read all categories with optional search and pagination
 export const getAllCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const allCategories = await db
+    const { page, limit, search } = req.query;
+
+    const condition =
+      search && typeof search === "string" && search.trim() !== ""
+        ? like(categories.name, `%${search.trim()}%`)
+        : undefined;
+
+    // Total count matching query
+    const countQuery = condition
+      ? db.select({ total: count() }).from(categories).where(condition)
+      : db.select({ total: count() }).from(categories);
+    const [{ total }] = await countQuery;
+
+    // If page parameter is supplied, apply pagination
+    if (page !== undefined) {
+      const pageNum = Math.max(1, Number(page) || 1);
+      const limitNum = Math.max(1, Number(limit) || 10);
+      const offsetNum = (pageNum - 1) * limitNum;
+      const totalPages = Math.ceil(total / limitNum) || 1;
+
+      const baseQuery = db
+        .select()
+        .from(categories)
+        .orderBy(desc(categories.createdAt))
+        .limit(limitNum)
+        .offset(offsetNum);
+
+      const data = condition ? await baseQuery.where(condition) : await baseQuery;
+
+      res.status(200).json({
+        success: true,
+        count: data.length,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages,
+        data,
+      });
+      return;
+    }
+
+    // Default / unpaginated call (for dropdowns, etc.)
+    const baseQuery = db
       .select()
       .from(categories)
       .orderBy(desc(categories.createdAt));
 
+    const allCategories = condition ? await baseQuery.where(condition) : await baseQuery;
+
     res.status(200).json({
       success: true,
       count: allCategories.length,
+      total,
+      page: 1,
+      limit: total || 1,
+      totalPages: 1,
       data: allCategories,
     });
   } catch (error: any) {

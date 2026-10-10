@@ -1,13 +1,69 @@
 import { Request, Response } from "express";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, like, count } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { subcategories, categories } from "../db/schema.js";
 
-// GET /api/subcategories - Get all subcategories (optional ?categoryId=)
+// GET /api/subcategories - Get all subcategories with optional categoryId, search, and pagination
 export const getAllSubcategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { categoryId } = req.query;
+    const { categoryId, search, page, limit } = req.query;
 
+    const conditions = [];
+
+    if (categoryId) {
+      conditions.push(eq(subcategories.categoryId, Number(categoryId)));
+    }
+
+    if (search && typeof search === "string" && search.trim() !== "") {
+      conditions.push(like(subcategories.name, `%${search.trim()}%`));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Count total matching items
+    const countQuery = whereClause
+      ? db.select({ total: count() }).from(subcategories).where(whereClause)
+      : db.select({ total: count() }).from(subcategories);
+    const [{ total }] = await countQuery;
+
+    // If page is provided, apply pagination
+    if (page !== undefined) {
+      const pageNum = Math.max(1, Number(page) || 1);
+      const limitNum = Math.max(1, Number(limit) || 10);
+      const offsetNum = (pageNum - 1) * limitNum;
+      const totalPages = Math.ceil(total / limitNum) || 1;
+
+      const baseQuery = db
+        .select({
+          id: subcategories.id,
+          name: subcategories.name,
+          image: subcategories.image,
+          categoryId: subcategories.categoryId,
+          categoryName: categories.name,
+          createdAt: subcategories.createdAt,
+          updatedAt: subcategories.updatedAt,
+        })
+        .from(subcategories)
+        .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+        .orderBy(desc(subcategories.createdAt))
+        .limit(limitNum)
+        .offset(offsetNum);
+
+      const results = whereClause ? await baseQuery.where(whereClause) : await baseQuery;
+
+      res.status(200).json({
+        success: true,
+        count: results.length,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages,
+        data: results,
+      });
+      return;
+    }
+
+    // Default / unpaginated call
     const baseQuery = db
       .select({
         id: subcategories.id,
@@ -22,13 +78,15 @@ export const getAllSubcategories = async (req: Request, res: Response): Promise<
       .leftJoin(categories, eq(subcategories.categoryId, categories.id))
       .orderBy(desc(subcategories.createdAt));
 
-    const results = categoryId
-      ? await baseQuery.where(eq(subcategories.categoryId, Number(categoryId)))
-      : await baseQuery;
+    const results = whereClause ? await baseQuery.where(whereClause) : await baseQuery;
 
     res.status(200).json({
       success: true,
       count: results.length,
+      total,
+      page: 1,
+      limit: total || 1,
+      totalPages: 1,
       data: results,
     });
   } catch (error: any) {

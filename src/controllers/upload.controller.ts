@@ -71,3 +71,64 @@ export const handleImageUpload = async (req: Request, res: Response): Promise<vo
     });
   }
 };
+
+export const handleMultipleImageUpload = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      res.status(400).json({ success: false, message: "No image files provided" });
+      return;
+    }
+
+    const imageServerUrl = process.env.IMAGE_SERVER_URL || "https://image.streamespn.org";
+    const apiKey = process.env.IMAGE_SERVER_API_KEY || "";
+
+    if (!apiKey) {
+      res.status(500).json({ success: false, message: "Image server API key is not configured" });
+      return;
+    }
+
+    const uploadPromises = files.map(async (file) => {
+      const formData = new FormData();
+      const blob = new Blob([file.buffer], { type: file.mimetype });
+      formData.append("file", blob, file.originalname);
+
+      const remoteResponse = await fetch(`${imageServerUrl}/api/upload`, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+        },
+        body: formData,
+      });
+
+      const result: any = await remoteResponse.json();
+
+      if (!remoteResponse.ok || !result.success) {
+        throw new Error(result.error || `Failed to upload ${file.originalname}`);
+      }
+
+      return {
+        url: result.url,
+        filename: result.filename,
+        size: result.size,
+        mimetype: result.mimetype,
+      };
+    });
+
+    const uploaded = await Promise.all(uploadPromises);
+
+    res.status(200).json({
+      success: true,
+      message: `${uploaded.length} images uploaded successfully`,
+      urls: uploaded.map((u) => u.url),
+      data: uploaded,
+    });
+  } catch (error: any) {
+    console.error("[upload] Error uploading multiple images:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "An unexpected error occurred during multiple image upload",
+    });
+  }
+};
+
