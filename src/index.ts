@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes.js";
 import serviceRoutes from "./routes/service.routes.js";
+import categoryRoutes from "./routes/category.routes.js";
 import { seedDatabase } from "./db/seed.js";
 
 dotenv.config();
@@ -36,6 +37,7 @@ app.get("/api/health", (req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/services", serviceRoutes);
+app.use("/api/categories", categoryRoutes);
 
 // Root route
 app.get("/", (req, res) => {

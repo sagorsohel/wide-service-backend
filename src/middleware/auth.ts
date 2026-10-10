@@ -3,8 +3,9 @@ import jwt from "jsonwebtoken";
 
 export interface AuthenticatedUser {
   id: number;
-  email: string;
-  role: "admin" | "staff" | "customer";
+  phone?: string;
+  email?: string;
+  role: "superadmin" | "creator" | "admin" | "staff" | "customer";
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -35,12 +36,27 @@ export const authenticateToken = (
   }
 };
 
+export const requireSuperAdmin = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.user || req.user.role !== "superadmin") {
+    res.status(403).json({
+      success: false,
+      message: "Forbidden: Only Super Admin is allowed to perform this operation",
+    });
+    return;
+  }
+  next();
+};
+
 export const requireAdmin = (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): void => {
-  if (!req.user || req.user.role !== "admin") {
+  if (!req.user || (req.user.role !== "admin" && req.user.role !== "superadmin")) {
     res.status(403).json({ success: false, message: "Admin authorization required" });
     return;
   }

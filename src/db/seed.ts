@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, poolConnection } from "./index.js";
-import { users } from "./schema.js";
+import { users, categories } from "./schema.js";
 
 export async function seedDatabase() {
   console.log("[seed] Checking initial users in database...");
@@ -11,7 +11,7 @@ export async function seedDatabase() {
       name: "Super Admin",
       phone: "01865625788",
       email: "superadmin@wide-service.com",
-      password: "password123", // fallback
+      password: "password123",
       plainPassword: "12345678",
       role: "superadmin" as const,
     },
@@ -44,7 +44,6 @@ export async function seedDatabase() {
       });
       console.log(`[seed] Created user: ${item.name} (${item.phone}) with role: ${item.role}`);
     } else {
-      // Ensure password is up to date with 12345678
       await db
         .update(users)
         .set({
@@ -53,6 +52,22 @@ export async function seedDatabase() {
         })
         .where(eq(users.phone, item.phone));
       console.log(`[seed] Updated existing user: ${item.name} (${item.phone})`);
+    }
+  }
+
+  // Seed default categories if none exist
+  const existingCategories = await db.select().from(categories).limit(1);
+  if (existingCategories.length === 0) {
+    const initialCategories = [
+      { name: "AC Maintenance & Repair", image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=150" },
+      { name: "Home Plumbing", image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=150" },
+      { name: "Electrical Wiring", image: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=150" },
+      { name: "House Cleaning", image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=150" },
+    ];
+
+    for (const cat of initialCategories) {
+      await db.insert(categories).values(cat);
+      console.log(`[seed] Created category: ${cat.name}`);
     }
   }
 
