@@ -55,52 +55,26 @@ export async function seedDatabase() {
     }
   }
 
-  // Seed default categories if none exist
+  // Seed default 30 categories and subcategories if none exist
   let allCats = await db.select().from(categories);
   if (allCats.length === 0) {
-    const initialCategories = [
-      { name: "AC Maintenance & Repair", image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=150" },
-      { name: "Home Plumbing", image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=150" },
-      { name: "Electrical Wiring", image: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=150" },
-      { name: "House Cleaning", image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=150" },
-    ];
-
-    for (const cat of initialCategories) {
-      await db.insert(categories).values(cat);
-      console.log(`[seed] Created category: ${cat.name}`);
-    }
-    allCats = await db.select().from(categories);
-  }
-
-  // Seed default subcategories if none exist
-  const existingSubcategories = await db.select().from(subcategories).limit(1);
-  if (existingSubcategories.length === 0 && allCats.length > 0) {
-    const firstCat = allCats[0];
-    const initialSubcategories = [
-      {
-        categoryId: firstCat.id,
-        name: "AC Deep Cleaning Service",
-        image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=150",
-      },
-      {
-        categoryId: firstCat.id,
-        name: "AC Gas Refill & Leak Check",
-        image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=150",
-      },
-    ];
-
-    if (allCats.length > 1) {
-      initialSubcategories.push({
-        categoryId: allCats[1].id,
-        name: "Pipe Leakage & Tap Fitting",
-        image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=150",
+    const { SEED_DATA } = await import("./seedCategoriesAndSubcategories.js");
+    for (const cat of SEED_DATA) {
+      const [catResult] = await db.insert(categories).values({
+        name: cat.name,
+        image: cat.image,
       });
-    }
+      const catId = Number(catResult.insertId);
 
-    for (const sub of initialSubcategories) {
-      await db.insert(subcategories).values(sub);
-      console.log(`[seed] Created subcategory: ${sub.name}`);
+      for (const sub of cat.subcategories) {
+        await db.insert(subcategories).values({
+          categoryId: catId,
+          name: sub.name,
+          image: sub.image,
+        });
+      }
     }
+    console.log(`[seed] Created 30 categories and all subcategories successfully!`);
   }
 
   console.log("[seed] Database seed completed successfully!");
