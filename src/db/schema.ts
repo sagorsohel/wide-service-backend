@@ -19,6 +19,15 @@ export const categories = mysqlTable("categories", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+export const subcategories = mysqlTable("subcategories", {
+  id: serial("id").primaryKey(),
+  categoryId: int("category_id").notNull(),
+  name: varchar("name", { length: 191 }).notNull(),
+  image: varchar("image", { length: 500 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 export const services = mysqlTable("services", {
   id: serial("id").primaryKey(),
   title: varchar("title", { length: 191 }).notNull(),
@@ -46,6 +55,8 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Category = typeof categories.$inferSelect;
 export type NewCategory = typeof categories.$inferInsert;
+export type Subcategory = typeof subcategories.$inferSelect;
+export type NewSubcategory = typeof subcategories.$inferInsert;
 export type Service = typeof services.$inferSelect;
 export type NewService = typeof services.$inferInsert;
 export type Booking = typeof bookings.$inferSelect;

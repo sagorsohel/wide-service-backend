@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, poolConnection } from "./index.js";
-import { users, categories } from "./schema.js";
+import { users, categories, subcategories } from "./schema.js";
 
 export async function seedDatabase() {
   console.log("[seed] Checking initial users in database...");
@@ -56,8 +56,8 @@ export async function seedDatabase() {
   }
 
   // Seed default categories if none exist
-  const existingCategories = await db.select().from(categories).limit(1);
-  if (existingCategories.length === 0) {
+  let allCats = await db.select().from(categories);
+  if (allCats.length === 0) {
     const initialCategories = [
       { name: "AC Maintenance & Repair", image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=150" },
       { name: "Home Plumbing", image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=150" },
@@ -68,6 +68,38 @@ export async function seedDatabase() {
     for (const cat of initialCategories) {
       await db.insert(categories).values(cat);
       console.log(`[seed] Created category: ${cat.name}`);
+    }
+    allCats = await db.select().from(categories);
+  }
+
+  // Seed default subcategories if none exist
+  const existingSubcategories = await db.select().from(subcategories).limit(1);
+  if (existingSubcategories.length === 0 && allCats.length > 0) {
+    const firstCat = allCats[0];
+    const initialSubcategories = [
+      {
+        categoryId: firstCat.id,
+        name: "AC Deep Cleaning Service",
+        image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=150",
+      },
+      {
+        categoryId: firstCat.id,
+        name: "AC Gas Refill & Leak Check",
+        image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=150",
+      },
+    ];
+
+    if (allCats.length > 1) {
+      initialSubcategories.push({
+        categoryId: allCats[1].id,
+        name: "Pipe Leakage & Tap Fitting",
+        image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=150",
+      });
+    }
+
+    for (const sub of initialSubcategories) {
+      await db.insert(subcategories).values(sub);
+      console.log(`[seed] Created subcategory: ${sub.name}`);
     }
   }
 
