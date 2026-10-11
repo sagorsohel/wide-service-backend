@@ -55,8 +55,8 @@ seedDatabase().catch((err) => {
   console.warn("[backend] Auto-seed note:", err.message);
 });
 
-app.listen(PORT, () => {
-  console.log(`[wide-service-backend] Server is running on http://localhost:${PORT}`);
+app.listen(Number(PORT), "0.0.0.0", () => {
+  console.log(`[wide-service-backend] Server is running on http://0.0.0.0:${PORT} (Accessible across LAN)`);
   console.log(`[wide-service-backend] Database target: ${process.env.DB_USER}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
 });
 

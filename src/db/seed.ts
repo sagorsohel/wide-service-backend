@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, poolConnection } from "./index.js";
-import { users, categories, subcategories } from "./schema.js";
+import { users, categories, subcategories, services } from "./schema.js";
 
 export async function seedDatabase() {
   console.log("[seed] Checking initial users in database...");
@@ -75,6 +75,13 @@ export async function seedDatabase() {
       }
     }
     console.log(`[seed] Created 30 categories and all subcategories successfully!`);
+  }
+
+  // Seed services if none exist
+  const existingServices = await db.select().from(services).limit(1);
+  if (existingServices.length === 0) {
+    const { seedServices } = await import("./seedServices.js");
+    await seedServices();
   }
 
   console.log("[seed] Database seed completed successfully!");

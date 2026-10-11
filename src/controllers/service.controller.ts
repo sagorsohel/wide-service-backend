@@ -14,10 +14,24 @@ const parseImages = (imagesVal: string | null | undefined): string[] => {
   }
 };
 
-// GET /api/services - Get all services with optional filters and pagination
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+// GET /api/services - Get all services with optional filters, distance sorting and pagination
 export const getAllServices = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { categoryId, subcategoryId, status, search, page, limit } = req.query;
+    const { categoryId, subcategoryId, status, search, page, limit, lat, lng, radiusKm, maxDistanceKm } = req.query;
 
     const conditions = [];
 
@@ -64,6 +78,8 @@ export const getAllServices = async (req: Request, res: Response): Promise<void>
           businessName: services.businessName,
           logo: services.logo,
           address: services.address,
+          latitude: services.latitude,
+          longitude: services.longitude,
           phone: services.phone,
           whatsapp: services.whatsapp,
           images: services.images,
@@ -88,10 +104,35 @@ export const getAllServices = async (req: Request, res: Response): Promise<void>
 
       const rawServices = whereClause ? await baseQuery.where(whereClause) : await baseQuery;
 
-      const formatted = rawServices.map((srv) => ({
-        ...srv,
-        images: parseImages(srv.images),
-      }));
+      let formatted = rawServices.map((srv) => {
+        let distanceKm: number | undefined = undefined;
+        if (lat && lng && srv.latitude != null && srv.longitude != null) {
+          distanceKm = calculateDistanceKm(
+            Number(lat),
+            Number(lng),
+            Number(srv.latitude),
+            Number(srv.longitude)
+          );
+        }
+        return {
+          ...srv,
+          images: parseImages(srv.images),
+          distanceKm,
+        };
+      });
+
+      if (lat && lng) {
+        formatted.sort((a, b) => {
+          if (a.distanceKm == null) return 1;
+          if (b.distanceKm == null) return -1;
+          return a.distanceKm - b.distanceKm;
+        });
+      }
+
+      const effectiveRadius = Number(radiusKm || maxDistanceKm);
+      if (!isNaN(effectiveRadius) && effectiveRadius > 0) {
+        formatted = formatted.filter((s) => s.distanceKm != null && s.distanceKm <= effectiveRadius);
+      }
 
       res.status(200).json({
         success: true,
@@ -113,6 +154,8 @@ export const getAllServices = async (req: Request, res: Response): Promise<void>
         businessName: services.businessName,
         logo: services.logo,
         address: services.address,
+        latitude: services.latitude,
+        longitude: services.longitude,
         phone: services.phone,
         whatsapp: services.whatsapp,
         images: services.images,
@@ -135,10 +178,35 @@ export const getAllServices = async (req: Request, res: Response): Promise<void>
 
     const rawServices = whereClause ? await baseQuery.where(whereClause) : await baseQuery;
 
-    const formatted = rawServices.map((srv) => ({
-      ...srv,
-      images: parseImages(srv.images),
-    }));
+    let formatted = rawServices.map((srv) => {
+      let distanceKm: number | undefined = undefined;
+      if (lat && lng && srv.latitude != null && srv.longitude != null) {
+        distanceKm = calculateDistanceKm(
+          Number(lat),
+          Number(lng),
+          Number(srv.latitude),
+          Number(srv.longitude)
+        );
+      }
+      return {
+        ...srv,
+        images: parseImages(srv.images),
+        distanceKm,
+      };
+    });
+
+    if (lat && lng) {
+      formatted.sort((a, b) => {
+        if (a.distanceKm == null) return 1;
+        if (b.distanceKm == null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+    }
+
+    const effectiveRadius = Number(radiusKm || maxDistanceKm);
+    if (!isNaN(effectiveRadius) && effectiveRadius > 0) {
+      formatted = formatted.filter((s) => s.distanceKm != null && s.distanceKm <= effectiveRadius);
+    }
 
     res.status(200).json({
       success: true,

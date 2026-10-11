@@ -1,4 +1,4 @@
-import { mysqlTable, serial, int, varchar, text, decimal, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
+import { mysqlTable, serial, int, varchar, text, decimal, double, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
@@ -34,6 +34,8 @@ export const services = mysqlTable("services", {
   businessName: varchar("business_name", { length: 191 }).notNull(),
   logo: varchar("logo", { length: 500 }),
   address: text("address").notNull(),
+  latitude: double("latitude"),
+  longitude: double("longitude"),
   phone: varchar("phone", { length: 50 }).notNull(),
   whatsapp: varchar("whatsapp", { length: 50 }),
   images: text("images"),
