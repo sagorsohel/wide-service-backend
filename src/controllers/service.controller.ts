@@ -29,11 +29,19 @@ function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: num
 }
 
 // GET /api/services - Get all services with optional filters, distance sorting and pagination
-export const getAllServices = async (req: Request, res: Response): Promise<void> => {
+export const getAllServices = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { categoryId, subcategoryId, status, search, page, limit, lat, lng, radiusKm, maxDistanceKm } = req.query;
+    const { categoryId, subcategoryId, status, search, page, limit, lat, lng, radiusKm, maxDistanceKm, userId } = req.query;
 
     const conditions = [];
+
+    // Creator isolation: If the requester is authenticated as a creator, strictly show only their own services
+    if (req.user?.role === "creator") {
+      conditions.push(eq(services.userId, req.user.id));
+    } else if (userId) {
+      // Super Admin or public filtering by creator
+      conditions.push(eq(services.userId, Number(userId)));
+    }
 
     if (categoryId) {
       conditions.push(eq(services.categoryId, Number(categoryId)));
@@ -41,8 +49,16 @@ export const getAllServices = async (req: Request, res: Response): Promise<void>
     if (subcategoryId) {
       conditions.push(eq(services.subcategoryId, Number(subcategoryId)));
     }
-    if (status && (status === "active" || status === "inactive")) {
-      conditions.push(eq(services.status, status as "active" | "inactive"));
+    if (status && typeof status === "string") {
+      if (status !== "all" && ["active", "inactive", "pending", "rejected"].includes(status)) {
+        conditions.push(eq(services.status, status as any));
+      }
+    } else {
+      // For creators and superadmins, show all statuses unless explicitly filtered.
+      // For public app / unauthenticated requests, default to "active" so unapproved services stay hidden.
+      if (req.user?.role !== "creator" && req.user?.role !== "superadmin") {
+        conditions.push(eq(services.status, "active"));
+      }
     }
     if (search && typeof search === "string" && search.trim() !== "") {
       const term = `%${search.trim()}%`;
@@ -76,6 +92,7 @@ export const getAllServices = async (req: Request, res: Response): Promise<void>
           id: services.id,
           name: services.name,
           businessName: services.businessName,
+          schedule: services.schedule,
           logo: services.logo,
           address: services.address,
           latitude: services.latitude,
@@ -152,6 +169,7 @@ export const getAllServices = async (req: Request, res: Response): Promise<void>
         id: services.id,
         name: services.name,
         businessName: services.businessName,
+        schedule: services.schedule,
         logo: services.logo,
         address: services.address,
         latitude: services.latitude,
@@ -240,6 +258,7 @@ export const getServiceById = async (req: Request, res: Response): Promise<void>
         id: services.id,
         name: services.name,
         businessName: services.businessName,
+        schedule: services.schedule,
         logo: services.logo,
         address: services.address,
         phone: services.phone,
@@ -291,6 +310,7 @@ export const createService = async (req: AuthenticatedRequest, res: Response): P
     const {
       name,
       businessName,
+      schedule,
       logo,
       address,
       phone,
@@ -302,11 +322,11 @@ export const createService = async (req: AuthenticatedRequest, res: Response): P
       status,
     } = req.body;
 
-    // Validate required fields
-    if (!name || !businessName || !address || !phone || !categoryId) {
+    // Validate required fields (businessName is optional)
+    if (!name || !address || !phone || !categoryId) {
       res.status(400).json({
         success: false,
-        message: "Name, Business Name, Address, Phone Number, and Category are required",
+        message: "Name, Address, Phone Number, and Category are required",
       });
       return;
     }
@@ -366,10 +386,25 @@ export const createService = async (req: AuthenticatedRequest, res: Response): P
     }
 
     const userId = req.user?.id || null;
+    const userRole = req.user?.role;
+
+    // By default, services created by creators are "pending" until approved by a superadmin
+    let initialStatus: "pending" | "active" | "inactive" | "rejected" = "pending";
+    if (userRole === "superadmin") {
+      if (status && ["active", "inactive", "pending", "rejected"].includes(status)) {
+        initialStatus = status;
+      } else {
+        initialStatus = "active";
+      }
+    } else {
+      // Creator or any non-superadmin role: always pending review
+      initialStatus = "pending";
+    }
 
     const [insertResult] = await db.insert(services).values({
       name: String(name).trim(),
-      businessName: String(businessName).trim(),
+      businessName: businessName ? String(businessName).trim() : null,
+      schedule: schedule ? String(schedule).trim() : null,
       logo: logo || null,
       address: String(address).trim(),
       phone: String(phone).trim(),
@@ -378,7 +413,7 @@ export const createService = async (req: AuthenticatedRequest, res: Response): P
       categoryId: numCategoryId,
       subcategoryId: numSubcategoryId,
       description: description ? String(description).trim() : null,
-      status: status === "inactive" ? "inactive" : "active",
+      status: initialStatus,
       userId,
     });
 
@@ -386,11 +421,15 @@ export const createService = async (req: AuthenticatedRequest, res: Response): P
 
     res.status(201).json({
       success: true,
-      message: "Service created successfully",
+      message:
+        initialStatus === "pending"
+          ? "Service created and submitted for admin approval"
+          : "Service created successfully",
       data: {
         id: newId,
         name: String(name).trim(),
-        businessName: String(businessName).trim(),
+        businessName: businessName ? String(businessName).trim() : null,
+        schedule: schedule ? String(schedule).trim() : null,
         logo: logo || null,
         address: String(address).trim(),
         phone: String(phone).trim(),
@@ -400,7 +439,7 @@ export const createService = async (req: AuthenticatedRequest, res: Response): P
         categoryName: categoryExists[0].name,
         subcategoryId: numSubcategoryId,
         description: description ? String(description).trim() : null,
-        status: status === "inactive" ? "inactive" : "active",
+        status: initialStatus,
         userId,
       },
     });
@@ -449,6 +488,7 @@ export const updateService = async (req: AuthenticatedRequest, res: Response): P
     const {
       name,
       businessName,
+      schedule,
       logo,
       address,
       phone,
@@ -463,13 +503,20 @@ export const updateService = async (req: AuthenticatedRequest, res: Response): P
     const updateData: any = {};
 
     if (name !== undefined) updateData.name = String(name).trim();
-    if (businessName !== undefined) updateData.businessName = String(businessName).trim();
+    if (businessName !== undefined) updateData.businessName = businessName ? String(businessName).trim() : null;
+    if (schedule !== undefined) updateData.schedule = schedule ? String(schedule).trim() : null;
     if (logo !== undefined) updateData.logo = logo || null;
     if (address !== undefined) updateData.address = String(address).trim();
     if (phone !== undefined) updateData.phone = String(phone).trim();
     if (whatsapp !== undefined) updateData.whatsapp = whatsapp ? String(whatsapp).trim() : null;
     if (description !== undefined) updateData.description = description ? String(description).trim() : null;
-    if (status !== undefined) updateData.status = status === "inactive" ? "inactive" : "active";
+    if (status !== undefined) {
+      if (userRole === "superadmin") {
+        if (["active", "inactive", "pending", "rejected"].includes(status)) {
+          updateData.status = status;
+        }
+      }
+    }
 
     // Category update
     let finalCategoryId = currentService.categoryId;
@@ -540,6 +587,7 @@ export const updateService = async (req: AuthenticatedRequest, res: Response): P
         id: services.id,
         name: services.name,
         businessName: services.businessName,
+        schedule: services.schedule,
         logo: services.logo,
         address: services.address,
         phone: services.phone,
@@ -625,3 +673,61 @@ export const deleteService = async (req: AuthenticatedRequest, res: Response): P
     });
   }
 };
+
+// PATCH /api/services/:id/status - Quick approve, activate or update status (Super Admin only)
+export const updateServiceStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      res.status(400).json({ success: false, message: "Invalid service ID" });
+      return;
+    }
+
+    const userRole = req.user?.role;
+    if (userRole !== "superadmin") {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: Only Super Admin can approve, reject, or change service status",
+      });
+      return;
+    }
+
+    const { status } = req.body;
+    if (!status || !["active", "inactive", "pending", "rejected"].includes(status)) {
+      res.status(400).json({
+        success: false,
+        message: "Status must be one of: 'pending', 'active', 'inactive', 'rejected'",
+      });
+      return;
+    }
+
+    const existing = await db
+      .select({ id: services.id, name: services.name, status: services.status })
+      .from(services)
+      .where(eq(services.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, message: "Service not found" });
+      return;
+    }
+
+    await db.update(services).set({ status }).where(eq(services.id, id));
+
+    res.status(200).json({
+      success: true,
+      message:
+        status === "active"
+          ? "Service approved and activated successfully"
+          : `Service status updated to ${status} successfully`,
+      data: { id, status },
+    });
+  } catch (error: any) {
+    console.error("[services] Error updating service status:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update service status",
+    });
+  }
+};
+

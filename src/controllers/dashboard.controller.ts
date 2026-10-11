@@ -1,20 +1,48 @@
-import { Request, Response } from "express";
-import { count, eq, desc } from "drizzle-orm";
+import { Response } from "express";
+import { count, eq, desc, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { services, categories, subcategories, users, bookings } from "../db/schema.js";
+import { AuthenticatedRequest } from "../middleware/auth.js";
 
-export const getDashboardStats = async (req: Request, res: Response): Promise<void> => {
+export const getDashboardStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    // 1. Overall Counts
-    const [{ totalServices }] = await db.select({ totalServices: count() }).from(services);
-    const [{ activeServices }] = await db
-      .select({ activeServices: count() })
-      .from(services)
-      .where(eq(services.status, "active"));
-    const [{ inactiveServices }] = await db
-      .select({ inactiveServices: count() })
-      .from(services)
-      .where(eq(services.status, "inactive"));
+    const isCreator = req.user?.role === "creator";
+    const creatorId = req.user?.id;
+
+    // 1. Overall Counts (Scoped to creator if user is a creator)
+    const [{ totalServices }] = isCreator && creatorId
+      ? await db.select({ totalServices: count() }).from(services).where(eq(services.userId, creatorId))
+      : await db.select({ totalServices: count() }).from(services);
+
+    const [{ activeServices }] = isCreator && creatorId
+      ? await db
+          .select({ activeServices: count() })
+          .from(services)
+          .where(and(eq(services.userId, creatorId), eq(services.status, "active")))
+      : await db
+          .select({ activeServices: count() })
+          .from(services)
+          .where(eq(services.status, "active"));
+
+    const [{ inactiveServices }] = isCreator && creatorId
+      ? await db
+          .select({ inactiveServices: count() })
+          .from(services)
+          .where(and(eq(services.userId, creatorId), eq(services.status, "inactive")))
+      : await db
+          .select({ inactiveServices: count() })
+          .from(services)
+          .where(eq(services.status, "inactive"));
+
+    const [{ pendingServices }] = isCreator && creatorId
+      ? await db
+          .select({ pendingServices: count() })
+          .from(services)
+          .where(and(eq(services.userId, creatorId), eq(services.status, "pending")))
+      : await db
+          .select({ pendingServices: count() })
+          .from(services)
+          .where(eq(services.status, "pending"));
 
     const [{ totalCategories }] = await db.select({ totalCategories: count() }).from(categories);
     const [{ totalSubcategories }] = await db.select({ totalSubcategories: count() }).from(subcategories);
@@ -30,7 +58,7 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
       .where(eq(bookings.status, "completed"));
 
     // 2. Services by Category
-    const servicesByCategoryRaw = await db
+    const servicesByCategoryQuery = db
       .select({
         categoryId: services.categoryId,
         categoryName: categories.name,
@@ -39,6 +67,10 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
       .from(services)
       .leftJoin(categories, eq(services.categoryId, categories.id))
       .groupBy(services.categoryId, categories.name);
+
+    const servicesByCategoryRaw = isCreator && creatorId
+      ? await servicesByCategoryQuery.where(eq(services.userId, creatorId))
+      : await servicesByCategoryQuery;
 
     // 3. Subcategories count per category
     const subcategoriesByCategoryRaw = await db
@@ -59,7 +91,7 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
       .groupBy(users.role);
 
     // 5. Recent Services (latest 5)
-    const recentServices = await db
+    const recentServicesBase = db
       .select({
         id: services.id,
         name: services.name,
@@ -79,6 +111,10 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
       .leftJoin(subcategories, eq(services.subcategoryId, subcategories.id))
       .orderBy(desc(services.createdAt))
       .limit(5);
+
+    const recentServices = isCreator && creatorId
+      ? await recentServicesBase.where(eq(services.userId, creatorId))
+      : await recentServicesBase;
 
     // 6. Recent Categories (latest 5)
     const recentCategories = await db
@@ -127,6 +163,7 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
           services: totalServices,
           activeServices,
           inactiveServices,
+          pendingServices,
           categories: totalCategories,
           subcategories: totalSubcategories,
           users: totalUsers,

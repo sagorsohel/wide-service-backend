@@ -28,9 +28,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Public registration only permits 'creator' or 'customer' roles
+    let assignedRole: "superadmin" | "creator" | "admin" | "staff" | "customer" = "customer";
+    if (role === "creator") {
+      assignedRole = "creator";
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    const validRoles = ["superadmin", "creator", "admin", "staff", "customer"];
-    const assignedRole = validRoles.includes(role) ? role : "customer";
 
     const insertResult = await db.insert(users).values({
       name,

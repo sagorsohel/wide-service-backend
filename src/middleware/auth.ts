@@ -36,6 +36,29 @@ export const authenticateToken = (
   }
 };
 
+export const optionalAuthenticateToken = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return next();
+  }
+
+  const secret = process.env.JWT_SECRET || "super_secret_jwt_key_blog_post_2026_x89a";
+
+  try {
+    const decoded = jwt.verify(token, secret) as AuthenticatedUser;
+    req.user = decoded;
+  } catch (error) {
+    // Ignore invalid/expired token for optional auth
+  }
+  next();
+};
+
 export const requireSuperAdmin = (
   req: AuthenticatedRequest,
   res: Response,

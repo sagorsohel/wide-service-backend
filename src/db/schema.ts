@@ -31,7 +31,8 @@ export const subcategories = mysqlTable("subcategories", {
 export const services = mysqlTable("services", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 191 }).notNull(),
-  businessName: varchar("business_name", { length: 191 }).notNull(),
+  businessName: varchar("business_name", { length: 191 }),
+  schedule: varchar("schedule", { length: 255 }),
   logo: varchar("logo", { length: 500 }),
   address: text("address").notNull(),
   latitude: double("latitude"),
@@ -42,7 +43,7 @@ export const services = mysqlTable("services", {
   categoryId: int("category_id").notNull(),
   subcategoryId: int("subcategory_id"),
   description: text("description"),
-  status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+  status: mysqlEnum("status", ["pending", "active", "inactive", "rejected"]).default("pending").notNull(),
   userId: int("user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
