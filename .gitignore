@@ -20,3 +20,8 @@ drizzle/meta/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Firebase Service Account
+*firebase*.json
+*service-account*.json
+

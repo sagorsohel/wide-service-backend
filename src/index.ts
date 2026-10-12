@@ -7,6 +7,8 @@ import categoryRoutes from "./routes/category.routes.js";
 import subcategoryRoutes from "./routes/subcategory.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
+import { initNotificationScheduler } from "./services/notificationCron.js";
 import { seedDatabase } from "./db/seed.js";
 
 dotenv.config();
@@ -44,6 +46,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/subcategories", subcategoryRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Root route
 app.get("/", (req, res) => {
@@ -54,6 +57,9 @@ app.get("/", (req, res) => {
 seedDatabase().catch((err) => {
   console.warn("[backend] Auto-seed note:", err.message);
 });
+
+// Initialize Push Notification Scheduled Cron Job
+initNotificationScheduler();
 
 app.listen(Number(PORT), "0.0.0.0", () => {
   console.log(`[wide-service-backend] Server is running on http://0.0.0.0:${PORT} (Accessible across LAN)`);
