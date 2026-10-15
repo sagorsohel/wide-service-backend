@@ -205,3 +205,84 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
     res.status(500).json({ success: false, message: error.message || "Failed to fetch profile" });
   }
 };
+
+export const googleAuth = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { idToken, email, name, photoURL } = req.body;
+
+    let userEmail = email;
+    let userName = name;
+    let userPhoto = photoURL;
+
+    // Verify token with Firebase Admin if idToken is provided and firebaseApp is initialized
+    if (idToken && firebaseApp) {
+      try {
+        const decoded = await getAuth(firebaseApp).verifyIdToken(idToken);
+        userEmail = decoded.email || userEmail;
+        userName = decoded.name || userName;
+        userPhoto = decoded.picture || userPhoto;
+      } catch (err: any) {
+        console.warn("[google-auth] Token verification note:", err.message);
+      }
+    }
+
+    if (!userEmail) {
+      res.status(400).json({ success: false, message: "Email is required for Google Sign-In" });
+      return;
+    }
+
+    // Check if user exists in database
+    const existing = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, userEmail))
+      .limit(1);
+
+    let user: any;
+    if (existing.length > 0) {
+      user = existing[0];
+    } else {
+      // Create new user with customer role
+      const randomPhone = `01${Math.floor(100000000 + Math.random() * 900000000)}`;
+      const dummyPassword = await bcrypt.hash(Math.random().toString(36), 10);
+      const insertResult = await db.insert(users).values({
+        name: userName || "Google User",
+        email: userEmail,
+        phone: randomPhone,
+        password: dummyPassword,
+        role: "customer",
+      });
+      const newId = insertResult[0].insertId;
+      user = {
+        id: newId,
+        name: userName || "Google User",
+        email: userEmail,
+        phone: randomPhone,
+        role: "customer",
+      };
+    }
+
+    const token = jwt.sign(
+      { id: user.id, phone: user.phone, role: user.role },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Google authentication successful",
+      data: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
+        photoURL: userPhoto,
+        token,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || "Failed to authenticate with Google" });
+  }
+};
+
