@@ -5,6 +5,8 @@ import { eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { AuthenticatedRequest } from "../middleware/auth.js";
+import { getAuth } from "firebase-admin/auth";
+import { firebaseApp } from "../config/firebase.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_blog_post_2026_x89a";
 
@@ -52,6 +54,42 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       { expiresIn: "7d" }
     );
 
+    // Sync with Firebase Admin Auth if Firebase SDK is configured
+    let firebaseCustomToken: string | null = null;
+    if (firebaseApp) {
+      try {
+        const fbAuth = getAuth(firebaseApp);
+        const fbUid = `user_${newUserId}`;
+
+        let formattedPhone: string | undefined = undefined;
+        if (phone) {
+          const digits = phone.replace(/[^0-9+]/g, "");
+          if (digits.startsWith("+")) formattedPhone = digits;
+          else if (digits.startsWith("880")) formattedPhone = `+${digits}`;
+          else if (digits.startsWith("01")) formattedPhone = `+88${digits}`;
+        }
+
+        try {
+          await fbAuth.createUser({
+            uid: fbUid,
+            email: email || undefined,
+            phoneNumber: formattedPhone,
+            displayName: name,
+            password: password,
+          });
+        } catch (fbCreateErr: any) {
+          console.warn("[firebase-auth] Note on Firebase user creation (non-fatal):", fbCreateErr.message);
+        }
+
+        firebaseCustomToken = await fbAuth.createCustomToken(fbUid, {
+          role: assignedRole,
+          name,
+        });
+      } catch (fbErr: any) {
+        console.warn("[firebase-auth] Note on Firebase token creation (non-fatal):", fbErr.message);
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: "User registered successfully",
@@ -62,6 +100,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         email,
         role: assignedRole,
         token,
+        firebaseToken: firebaseCustomToken,
       },
     });
   } catch (error: any) {
@@ -87,14 +126,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       .limit(1);
 
     if (existingUsers.length === 0) {
-      res.status(401).json({ success: false, message: "Invalid phone number or password" });
+      res.status(401).json({ success: false, message: "Invalid phone number/email or password" });
       return;
     }
 
     const user = existingUsers[0];
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      res.status(401).json({ success: false, message: "Invalid phone number or password" });
+      res.status(401).json({ success: false, message: "Invalid phone number/email or password" });
       return;
     }
 
@@ -103,6 +142,20 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       JWT_SECRET,
       { expiresIn: "7d" }
     );
+
+    // Generate Firebase custom token if Firebase Admin SDK is initialized
+    let firebaseCustomToken: string | null = null;
+    if (firebaseApp) {
+      try {
+        const fbAuth = getAuth(firebaseApp);
+        firebaseCustomToken = await fbAuth.createCustomToken(`user_${user.id}`, {
+          role: user.role,
+          name: user.name,
+        });
+      } catch (fbErr: any) {
+        // Non-fatal warning
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -114,6 +167,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         email: user.email,
         role: user.role,
         token,
+        firebaseToken: firebaseCustomToken,
       },
     });
   } catch (error: any) {
