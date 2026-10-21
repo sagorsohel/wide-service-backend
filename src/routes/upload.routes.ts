@@ -4,14 +4,14 @@ import {
   handleImageUpload,
   handleMultipleImageUpload,
 } from "../controllers/upload.controller.js";
-import { authenticateToken } from "../middleware/auth.js";
+import { optionalAuthenticateToken } from "../middleware/auth.js";
 
 const router = Router();
 
 // Single image upload
 router.post(
   "/",
-  authenticateToken,
+  optionalAuthenticateToken,
   uploadMiddleware.single("file"),
   handleImageUpload
 );
@@ -19,7 +19,7 @@ router.post(
 // Multiple image upload (up to 10 files)
 router.post(
   "/multiple",
-  authenticateToken,
+  optionalAuthenticateToken,
   uploadMiddleware.array("files", 10),
   handleMultipleImageUpload
 );
