@@ -7,8 +7,26 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 191 }).unique(),
   password: varchar("password", { length: 255 }).notNull(),
   role: mysqlEnum("role", ["superadmin", "creator", "admin", "staff", "customer"]).default("customer").notNull(),
+  avatar: varchar("avatar", { length: 500 }),
+  servicesViewed: int("services_viewed").default(0).notNull(),
+  detailsViewed: int("details_viewed").default(0).notNull(),
+  callsClicked: int("calls_clicked").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const userFavorites = mysqlTable("user_favorites", {
+  id: serial("id").primaryKey(),
+  userId: int("user_id").notNull(),
+  serviceId: int("service_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const userRecentServices = mysqlTable("user_recent_services", {
+  id: serial("id").primaryKey(),
+  userId: int("user_id").notNull(),
+  serviceId: int("service_id").notNull(),
+  viewedAt: timestamp("viewed_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export const categories = mysqlTable("categories", {

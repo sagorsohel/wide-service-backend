@@ -8,6 +8,7 @@ import subcategoryRoutes from "./routes/subcategory.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
+import userRoutes from "./routes/user.routes.js";
 import { initNotificationScheduler } from "./services/notificationCron.js";
 import { seedDatabase } from "./db/seed.js";
 
@@ -47,6 +48,7 @@ app.use("/api/subcategories", subcategoryRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/user", userRoutes);
 
 // Root route
 app.get("/", (req, res) => {

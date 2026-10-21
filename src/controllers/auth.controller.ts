@@ -12,7 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_blog_post_202
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, phone, email, password, role } = req.body;
+    const { name, phone, email, password, role, avatar } = req.body;
 
     if (!name || !phone || !password) {
       res.status(400).json({ success: false, message: "Name, phone and password are required" });
@@ -44,6 +44,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       email: email || null,
       password: hashedPassword,
       role: assignedRole,
+      avatar: avatar || null,
     });
 
     const newUserId = insertResult[0].insertId;
@@ -96,9 +97,15 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       data: {
         id: newUserId,
         name,
+        displayName: name,
         phone,
         email,
         role: assignedRole,
+        avatar: avatar || null,
+        photoURL: avatar || null,
+        servicesViewed: 0,
+        detailsViewed: 0,
+        callsClicked: 0,
         token,
         firebaseToken: firebaseCustomToken,
       },
@@ -163,9 +170,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       data: {
         id: user.id,
         name: user.name,
+        displayName: user.name,
         phone: user.phone,
         email: user.email,
         role: user.role,
+        avatar: user.avatar || null,
+        photoURL: user.avatar || null,
+        servicesViewed: user.servicesViewed || 0,
+        detailsViewed: user.detailsViewed || 0,
+        callsClicked: user.callsClicked || 0,
         token,
         firebaseToken: firebaseCustomToken,
       },
@@ -189,6 +202,10 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
         phone: users.phone,
         email: users.email,
         role: users.role,
+        avatar: users.avatar,
+        servicesViewed: users.servicesViewed,
+        detailsViewed: users.detailsViewed,
+        callsClicked: users.callsClicked,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -200,7 +217,15 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
       return;
     }
 
-    res.status(200).json({ success: true, data: userList[0] });
+    const u = userList[0];
+    res.status(200).json({
+      success: true,
+      data: {
+        ...u,
+        photoURL: u.avatar || null,
+        displayName: u.name,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to fetch profile" });
   }
