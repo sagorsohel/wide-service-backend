@@ -36,11 +36,19 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    const [recentCountResult] = await poolConnection.query(
+      `SELECT COUNT(*) as count FROM user_recent_services WHERE user_id = ?`,
+      [req.user.id]
+    );
+    const realViews = Number((recentCountResult as any)?.[0]?.count) || 0;
+
     const u = userRecords[0];
     res.status(200).json({
       success: true,
       data: {
         ...u,
+        servicesViewed: realViews,
+        detailsViewed: realViews,
         photoURL: u.avatar || null,
         displayName: u.name,
       },
@@ -113,12 +121,20 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response): P
       .where(eq(users.id, req.user.id))
       .limit(1);
 
+    const [recentCountResult] = await poolConnection.query(
+      `SELECT COUNT(*) as count FROM user_recent_services WHERE user_id = ?`,
+      [req.user.id]
+    );
+    const realViews = Number((recentCountResult as any)?.[0]?.count) || 0;
+
     const userObj = updatedUserList[0];
     res.status(200).json({
       success: true,
       message: "Profile updated successfully in database",
       data: {
         ...userObj,
+        servicesViewed: realViews,
+        detailsViewed: realViews,
         photoURL: userObj.avatar || null,
         displayName: userObj.name,
       },
@@ -336,6 +352,17 @@ export const recordRecent = async (req: AuthenticatedRequest, res: Response): Pr
        VALUES (?, ?, NOW())
        ON DUPLICATE KEY UPDATE viewed_at = NOW()`,
       [req.user.id, numServiceId]
+    );
+
+    // Sync users table services_viewed & details_viewed with real recent count
+    const [cntRes] = await poolConnection.query(
+      `SELECT COUNT(*) as count FROM user_recent_services WHERE user_id = ?`,
+      [req.user.id]
+    );
+    const realCount = Number((cntRes as any)?.[0]?.count) || 0;
+    await poolConnection.query(
+      `UPDATE users SET services_viewed = ?, details_viewed = ? WHERE id = ?`,
+      [realCount, realCount, req.user.id]
     );
 
     res.status(200).json({
