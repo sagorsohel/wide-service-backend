@@ -252,3 +252,30 @@ export const deleteNotification = async (req: AuthenticatedRequest, res: Respons
     res.status(500).json({ success: false, message: error.message || "Failed to delete notification" });
   }
 };
+
+// GET /api/notifications/public (Public / App Feed)
+export const getPublicNotifications = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const list = await db
+      .select({
+        id: notifications.id,
+        title: notifications.title,
+        body: notifications.body,
+        imageUrl: notifications.imageUrl,
+        sentAt: notifications.sentAt,
+        createdAt: notifications.createdAt,
+      })
+      .from(notifications)
+      .where(eq(notifications.status, "sent"))
+      .orderBy(desc(notifications.sentAt), desc(notifications.createdAt))
+      .limit(30);
+
+    res.status(200).json({
+      success: true,
+      data: list,
+    });
+  } catch (error: any) {
+    console.error("[notification.controller] getPublicNotifications error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch notifications" });
+  }
+};

@@ -6,6 +6,7 @@ import {
   getNotificationStats,
   cancelNotification,
   deleteNotification,
+  getPublicNotifications,
 } from "../controllers/notification.controller.js";
 import {
   authenticateToken,
@@ -15,8 +16,9 @@ import {
 
 const router = Router();
 
-// Public / Optional Token Registration for App (Guests and Logged-in users)
+// Public / Optional Token Registration and App Notifications Feed
 router.post("/register-token", optionalAuthenticateToken, registerDeviceToken);
+router.get("/public", getPublicNotifications);
 
 // Protected routes for Admins / Super Admins
 router.post("/send", authenticateToken, requireSuperAdmin, sendNotification);

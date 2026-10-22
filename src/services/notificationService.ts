@@ -40,6 +40,7 @@ async function sendExpoPushNotifications(
       data: { ...(data || {}), imageUrl },
       priority: "high",
       channelId: "default",
+      _displayInForeground: true,
     }));
 
     try {
@@ -129,8 +130,32 @@ export async function sendPushNotification(payload: PushPayload) {
           body,
           ...(imageUrl ? { imageUrl } : {}),
         },
-        data: data || {},
+        data: {
+          ...(data || {}),
+          ...(imageUrl ? { imageUrl } : {}),
+        },
         tokens: batch,
+        android: {
+          priority: "high",
+          notification: {
+            title,
+            body,
+            channelId: "default",
+            sound: "default",
+            priority: "high",
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            ...(imageUrl ? { imageUrl } : {}),
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
       };
 
       try {
