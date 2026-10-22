@@ -1,4 +1,4 @@
-import { mysqlTable, serial, int, varchar, text, decimal, double, timestamp, mysqlEnum } from "drizzle-orm/mysql-core";
+import { mysqlTable, serial, int, varchar, text, decimal, double, timestamp, mysqlEnum, index } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
@@ -20,14 +20,18 @@ export const userFavorites = mysqlTable("user_favorites", {
   userId: int("user_id").notNull(),
   serviceId: int("service_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_user_fav_user_id").on(table.userId),
+]);
 
 export const userRecentServices = mysqlTable("user_recent_services", {
   id: serial("id").primaryKey(),
   userId: int("user_id").notNull(),
   serviceId: int("service_id").notNull(),
   viewedAt: timestamp("viewed_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("idx_user_recent_user_id").on(table.userId),
+]);
 
 export const categories = mysqlTable("categories", {
   id: serial("id").primaryKey(),
@@ -44,7 +48,9 @@ export const subcategories = mysqlTable("subcategories", {
   image: varchar("image", { length: 500 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("idx_subcategories_cat_id").on(table.categoryId),
+]);
 
 export const services = mysqlTable("services", {
   id: serial("id").primaryKey(),
@@ -65,7 +71,12 @@ export const services = mysqlTable("services", {
   userId: int("user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("idx_services_subcat_status").on(table.subcategoryId, table.status),
+  index("idx_services_cat_status").on(table.categoryId, table.status),
+  index("idx_services_status").on(table.status),
+  index("idx_services_created_at").on(table.createdAt),
+]);
 
 export const bookings = mysqlTable("bookings", {
   id: serial("id").primaryKey(),
