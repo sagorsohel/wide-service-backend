@@ -80,10 +80,10 @@ export const getAllServices = async (req: AuthenticatedRequest, res: Response): 
       : db.select({ total: count() }).from(services);
     const [{ total }] = await countQuery;
 
-    // If page is provided, apply pagination
-    if (page !== undefined) {
+    // If page or limit is provided, apply pagination
+    if (page !== undefined || limit !== undefined) {
       const pageNum = Math.max(1, Number(page) || 1);
-      const limitNum = Math.max(1, Number(limit) || 10);
+      const limitNum = Math.max(1, Number(limit) || 30);
       const offsetNum = (pageNum - 1) * limitNum;
       const totalPages = Math.ceil(total / limitNum) || 1;
 
@@ -163,7 +163,7 @@ export const getAllServices = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    // Default / unpaginated call
+    // Default / unpaginated call (safety capped to 60 items for fast transfer)
     const baseQuery = db
       .select({
         id: services.id,
@@ -192,7 +192,8 @@ export const getAllServices = async (req: AuthenticatedRequest, res: Response): 
       .leftJoin(categories, eq(services.categoryId, categories.id))
       .leftJoin(subcategories, eq(services.subcategoryId, subcategories.id))
       .leftJoin(users, eq(services.userId, users.id))
-      .orderBy(desc(services.createdAt));
+      .orderBy(desc(services.createdAt))
+      .limit(60);
 
     const rawServices = whereClause ? await baseQuery.where(whereClause) : await baseQuery;
 
