@@ -63,27 +63,32 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response): P
 
     const { name, phone, email, avatar } = req.body;
 
-    if (!name || !phone) {
-      res.status(400).json({ success: false, message: "Name and phone are required" });
+    if (!name || !name.trim()) {
+      res.status(400).json({ success: false, message: "Name is required" });
       return;
     }
 
-    // Check if phone or email is already taken by another user
-    const existing = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(sql`${users.id} != ${req.user.id} AND (${users.phone} = ${phone} OR (${email ? sql`${users.email} = ${email}` : sql`1=0`}))`)
-      .limit(1);
+    const cleanPhone = phone && String(phone).trim() ? String(phone).trim() : null;
+    const cleanEmail = email && String(email).trim() ? String(email).trim() : null;
 
-    if (existing.length > 0) {
-      res.status(409).json({ success: false, message: "Phone or email already in use by another account" });
-      return;
+    // Check if phone or email is already taken by another user
+    if (cleanPhone || cleanEmail) {
+      const existing = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(sql`${users.id} != ${req.user.id} AND (${cleanPhone ? sql`${users.phone} = ${cleanPhone}` : sql`1=0`} OR (${cleanEmail ? sql`${users.email} = ${cleanEmail}` : sql`1=0`}))`)
+        .limit(1);
+
+      if (existing.length > 0) {
+        res.status(409).json({ success: false, message: "Phone or email already in use by another account" });
+        return;
+      }
     }
 
     const updateFields: any = {
       name: name.trim(),
-      phone: phone.trim(),
-      email: email ? email.trim() : null,
+      phone: cleanPhone,
+      email: cleanEmail,
     };
 
     if (avatar !== undefined) {

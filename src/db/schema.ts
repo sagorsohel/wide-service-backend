@@ -3,9 +3,9 @@ import { mysqlTable, serial, int, varchar, text, decimal, double, timestamp, mys
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 191 }).notNull(),
-  phone: varchar("phone", { length: 20 }).notNull().unique(),
+  phone: varchar("phone", { length: 20 }).unique(),
   email: varchar("email", { length: 191 }).unique(),
-  password: varchar("password", { length: 255 }).notNull(),
+  password: varchar("password", { length: 255 }),
   role: mysqlEnum("role", ["superadmin", "creator", "admin", "staff", "customer"]).default("customer").notNull(),
   avatar: varchar("avatar", { length: 500 }),
   servicesViewed: int("services_viewed").default(0).notNull(),

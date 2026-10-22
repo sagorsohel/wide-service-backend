@@ -25,6 +25,10 @@ export async function ensureUserTablesAndColumns() {
       console.log("[db] Added 'calls_clicked' column to users table");
     }
 
+    // Ensure phone and password columns are nullable for Google Sign-In
+    await poolConnection.query("ALTER TABLE users MODIFY COLUMN phone VARCHAR(20) NULL");
+    await poolConnection.query("ALTER TABLE users MODIFY COLUMN password VARCHAR(255) NULL");
+
     // Create user_favorites table if not exists
     await poolConnection.query(`
       CREATE TABLE IF NOT EXISTS user_favorites (

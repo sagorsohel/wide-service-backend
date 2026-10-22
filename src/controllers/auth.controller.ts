@@ -138,6 +138,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     const user = existingUsers[0];
+    if (!user.password) {
+      res.status(401).json({ success: false, message: "This account was created with Google. Please use Google Sign-In." });
+      return;
+    }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       res.status(401).json({ success: false, message: "Invalid phone number/email or password" });
@@ -266,29 +270,37 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     let user: any;
     if (existing.length > 0) {
       user = existing[0];
+      if (userPhoto && !user.avatar) {
+        await db.update(users).set({ avatar: userPhoto }).where(eq(users.id, user.id));
+        user.avatar = userPhoto;
+      }
     } else {
-      // Create new user with customer role
-      const randomPhone = `01${Math.floor(100000000 + Math.random() * 900000000)}`;
+      // Create new user with customer role - phone is NULL (never auto-set)
       const dummyPassword = await bcrypt.hash(Math.random().toString(36), 10);
       const insertResult = await db.insert(users).values({
         name: userName || "Google User",
         email: userEmail,
-        phone: randomPhone,
+        phone: null,
         password: dummyPassword,
         role: "customer",
+        avatar: userPhoto || null,
       });
       const newId = insertResult[0].insertId;
       user = {
         id: newId,
         name: userName || "Google User",
         email: userEmail,
-        phone: randomPhone,
+        phone: null,
         role: "customer",
+        avatar: userPhoto || null,
+        servicesViewed: 0,
+        detailsViewed: 0,
+        callsClicked: 0,
       };
     }
 
     const token = jwt.sign(
-      { id: user.id, phone: user.phone, role: user.role },
+      { id: user.id, phone: user.phone || "", role: user.role },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -299,10 +311,15 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
       data: {
         id: user.id,
         name: user.name,
-        phone: user.phone,
+        displayName: user.name,
+        phone: user.phone || null,
         email: user.email,
         role: user.role,
-        photoURL: userPhoto,
+        avatar: user.avatar || userPhoto || null,
+        photoURL: user.avatar || userPhoto || null,
+        servicesViewed: user.servicesViewed || 0,
+        detailsViewed: user.detailsViewed || 0,
+        callsClicked: user.callsClicked || 0,
         token,
       },
     });
