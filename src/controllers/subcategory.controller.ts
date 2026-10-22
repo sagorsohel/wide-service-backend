@@ -3,10 +3,32 @@ import { eq, desc, and, like, count } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { subcategories, categories } from "../db/schema.js";
 
+// In-memory cache for ultra-fast subcategory responses (< 2ms)
+const cachedSubcategoriesMap = new Map<string, { response: any; timestamp: number }>();
+const SUBCAT_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+export const invalidateSubcategoriesCache = () => {
+  cachedSubcategoriesMap.clear();
+};
+
 // GET /api/subcategories - Get all subcategories with optional categoryId, search, and pagination
 export const getAllSubcategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const { categoryId, search, page, limit } = req.query;
+
+    const hasSearch = search && typeof search === "string" && search.trim() !== "";
+    const cacheKey = !hasSearch && page === undefined && limit === undefined
+      ? (categoryId ? `cat_${categoryId}` : "all")
+      : null;
+
+    if (cacheKey && cachedSubcategoriesMap.has(cacheKey)) {
+      const entry = cachedSubcategoriesMap.get(cacheKey)!;
+      if (Date.now() - entry.timestamp < SUBCAT_CACHE_TTL_MS) {
+        res.setHeader("X-Cache", "HIT");
+        res.status(200).json(entry.response);
+        return;
+      }
+    }
 
     const conditions = [];
 
@@ -14,8 +36,8 @@ export const getAllSubcategories = async (req: Request, res: Response): Promise<
       conditions.push(eq(subcategories.categoryId, Number(categoryId)));
     }
 
-    if (search && typeof search === "string" && search.trim() !== "") {
-      conditions.push(like(subcategories.name, `%${search.trim()}%`));
+    if (hasSearch) {
+      conditions.push(like(subcategories.name, `%${(search as string).trim()}%`));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -80,7 +102,7 @@ export const getAllSubcategories = async (req: Request, res: Response): Promise<
 
     const results = whereClause ? await baseQuery.where(whereClause) : await baseQuery;
 
-    res.status(200).json({
+    const responsePayload = {
       success: true,
       count: results.length,
       total,
@@ -88,7 +110,17 @@ export const getAllSubcategories = async (req: Request, res: Response): Promise<
       limit: total || 1,
       totalPages: 1,
       data: results,
-    });
+    };
+
+    if (cacheKey) {
+      cachedSubcategoriesMap.set(cacheKey, {
+        response: responsePayload,
+        timestamp: Date.now(),
+      });
+    }
+
+    res.setHeader("X-Cache", "MISS");
+    res.status(200).json(responsePayload);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to fetch subcategories" });
   }
@@ -186,6 +218,7 @@ export const createSubcategory = async (req: Request, res: Response): Promise<vo
     });
 
     const newId = insertResult[0].insertId;
+    invalidateSubcategoriesCache();
 
     res.status(201).json({
       success: true,
@@ -275,6 +308,8 @@ export const updateSubcategory = async (req: Request, res: Response): Promise<vo
       })
       .where(eq(subcategories.id, id));
 
+    invalidateSubcategoriesCache();
+
     res.status(200).json({
       success: true,
       message: "Subcategory updated successfully",
@@ -307,6 +342,7 @@ export const deleteSubcategory = async (req: Request, res: Response): Promise<vo
     }
 
     await db.delete(subcategories).where(eq(subcategories.id, id));
+    invalidateSubcategoriesCache();
 
     res.status(200).json({
       success: true,

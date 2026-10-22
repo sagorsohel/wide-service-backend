@@ -3,6 +3,16 @@ import { eq, desc, like, count } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { categories } from "../db/schema.js";
 
+// In-memory cache for ultra-fast category responses (< 2ms)
+let cachedAllCategoriesResponse: any = null;
+let categoryCacheTimestamp = 0;
+const CATEGORY_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+export const invalidateCategoriesCache = () => {
+  cachedAllCategoriesResponse = null;
+  categoryCacheTimestamp = 0;
+};
+
 // GET /api/categories - Read all categories with optional search and pagination
 export const getAllCategories = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -12,6 +22,18 @@ export const getAllCategories = async (req: Request, res: Response): Promise<voi
       search && typeof search === "string" && search.trim() !== ""
         ? like(categories.name, `%${search.trim()}%`)
         : undefined;
+
+    // Instant return from in-memory cache for default public queries (used by App and Web)
+    if (!condition && page === undefined && limit === undefined) {
+      if (
+        cachedAllCategoriesResponse &&
+        Date.now() - categoryCacheTimestamp < CATEGORY_CACHE_TTL_MS
+      ) {
+        res.setHeader("X-Cache", "HIT");
+        res.status(200).json(cachedAllCategoriesResponse);
+        return;
+      }
+    }
 
     // Total count matching query
     const countQuery = condition
@@ -47,7 +69,7 @@ export const getAllCategories = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Default / unpaginated call (for dropdowns, etc.)
+    // Default / unpaginated call (for dropdowns, app home screen, etc.)
     const baseQuery = db
       .select()
       .from(categories)
@@ -55,7 +77,7 @@ export const getAllCategories = async (req: Request, res: Response): Promise<voi
 
     const allCategories = condition ? await baseQuery.where(condition) : await baseQuery;
 
-    res.status(200).json({
+    const responsePayload = {
       success: true,
       count: allCategories.length,
       total,
@@ -63,7 +85,15 @@ export const getAllCategories = async (req: Request, res: Response): Promise<voi
       limit: total || 1,
       totalPages: 1,
       data: allCategories,
-    });
+    };
+
+    if (!condition) {
+      cachedAllCategoriesResponse = responsePayload;
+      categoryCacheTimestamp = Date.now();
+    }
+
+    res.setHeader("X-Cache", "MISS");
+    res.status(200).json(responsePayload);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to fetch categories" });
   }
@@ -120,6 +150,7 @@ export const createCategory = async (req: Request, res: Response): Promise<void>
     });
 
     const newId = insertResult[0].insertId;
+    invalidateCategoriesCache();
 
     res.status(201).json({
       success: true,
@@ -180,6 +211,8 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
       })
       .where(eq(categories.id, id));
 
+    invalidateCategoriesCache();
+
     res.status(200).json({
       success: true,
       message: "Category updated successfully",
@@ -210,6 +243,7 @@ export const deleteCategory = async (req: Request, res: Response): Promise<void>
     }
 
     await db.delete(categories).where(eq(categories.id, id));
+    invalidateCategoriesCache();
 
     res.status(200).json({
       success: true,
