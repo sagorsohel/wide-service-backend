@@ -262,6 +262,7 @@ export const getPublicNotifications = async (_req: Request, res: Response): Prom
         title: notifications.title,
         body: notifications.body,
         imageUrl: notifications.imageUrl,
+        target: notifications.target,
         sentAt: notifications.sentAt,
         createdAt: notifications.createdAt,
       })

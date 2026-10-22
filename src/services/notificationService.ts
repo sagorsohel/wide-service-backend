@@ -104,7 +104,7 @@ export async function sendPushNotification(payload: PushPayload) {
 
   // 2. Partition tokens: Expo Push Tokens vs Native FCM Tokens
   const expoTokens = tokens.filter(isExpoPushToken);
-  const fcmTokens = tokens.filter((t) => !isExpoPushToken(t));
+  const fcmTokens = tokens.filter((t) => !isExpoPushToken(t) && !t.startsWith("client-"));
 
   let totalSuccess = 0;
   let totalFailure = 0;
@@ -209,7 +209,7 @@ export async function registerDeviceToken(token: string, userId?: number | null,
     await db
       .update(deviceTokens)
       .set({
-        userId: userId ?? existing[0].userId,
+        userId: userId !== undefined ? userId : existing[0].userId,
         platform: platform || existing[0].platform,
         updatedAt: new Date(),
       })
