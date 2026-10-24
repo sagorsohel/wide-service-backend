@@ -107,13 +107,44 @@ export async function sendPushNotification(payload: PushPayload) {
     };
   }
 
-  // 2. Partition tokens: Expo Push Tokens vs Native FCM Tokens
-  const expoTokens = tokens.filter(isExpoPushToken);
-  const fcmTokens = tokens.filter((t) => !isExpoPushToken(t) && !t.startsWith("client-"));
+  // 2. Identify and prune any ghost/dummy/client test tokens
+  const isDummyToken = (t: string) =>
+    !t ||
+    t.startsWith("client-") ||
+    t.includes("dummy") ||
+    t.includes("probe") ||
+    t.includes("test-") ||
+    t.length < 25;
+
+  const ghostTokens = tokens.filter(isDummyToken);
+  const validTokens = tokens.filter((t) => !isDummyToken(t));
+
+  const tokensToRemove: string[] = [];
+  if (ghostTokens.length > 0) {
+    tokensToRemove.push(...ghostTokens);
+  }
+
+  if (validTokens.length === 0) {
+    if (tokensToRemove.length > 0) {
+      try {
+        await db.delete(deviceTokens).where(inArray(deviceTokens.token, tokensToRemove));
+        console.log(`[push] Cleaned up ${tokensToRemove.length} ghost/dummy tokens`);
+      } catch {}
+    }
+    return {
+      successCount: 0,
+      failureCount: 0,
+      totalCount: 0,
+      message: "No active mobile devices registered yet. Please open the Wide Service mobile app once to register this device.",
+    };
+  }
+
+  // 3. Partition valid tokens: Expo Push Tokens vs Native FCM Tokens
+  const expoTokens = validTokens.filter(isExpoPushToken);
+  const fcmTokens = validTokens.filter((t) => !isExpoPushToken(t));
 
   let totalSuccess = 0;
   let totalFailure = 0;
-  const tokensToRemove: string[] = [];
   const allFailureReasons: string[] = [];
 
   // A. Handle Expo Tokens (Expo Go & Expo Managed Clients)
@@ -178,7 +209,9 @@ export async function sendPushNotification(payload: PushPayload) {
             allFailureReasons.push(errCode);
             if (
               errCode === "messaging/registration-token-not-registered" ||
-              errCode === "messaging/invalid-registration-token"
+              errCode === "messaging/invalid-registration-token" ||
+              errCode === "messaging/invalid-argument" ||
+              errCode === "messaging/mismatched-credential"
             ) {
               tokensToRemove.push(batch[idx]);
             }
@@ -192,11 +225,11 @@ export async function sendPushNotification(payload: PushPayload) {
     }
   }
 
-  // 3. Clean up invalid tokens from DB asynchronously
+  // 4. Clean up invalid & ghost tokens from DB asynchronously
   if (tokensToRemove.length > 0) {
     try {
       await db.delete(deviceTokens).where(inArray(deviceTokens.token, tokensToRemove));
-      console.log(`[push] Cleaned up ${tokensToRemove.length} inactive tokens`);
+      console.log(`[push] Cleaned up ${tokensToRemove.length} inactive/ghost tokens`);
     } catch (cleanupErr) {
       console.warn("[push] Token cleanup warning:", cleanupErr);
     }
@@ -205,7 +238,7 @@ export async function sendPushNotification(payload: PushPayload) {
   return {
     successCount: totalSuccess,
     failureCount: totalFailure,
-    totalCount: tokens.length,
+    totalCount: validTokens.length,
     failureReasons: Array.from(new Set(allFailureReasons)).slice(0, 5),
   };
 }
