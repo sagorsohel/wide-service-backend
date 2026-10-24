@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { eq, desc, count, and, like } from "drizzle-orm";
-import { db } from "../db/index.js";
+import { db, poolConnection } from "../db/index.js";
 import { notifications, deviceTokens, users } from "../db/schema.js";
 import { sendPushNotification, registerDeviceToken as registerTokenService } from "../services/notificationService.js";
 import { AuthenticatedRequest } from "../middleware/auth.js";
@@ -284,3 +284,32 @@ export const getPublicNotifications = async (_req: Request, res: Response): Prom
     res.status(500).json({ success: false, message: "Failed to fetch notifications" });
   }
 };
+
+/**
+ * DELETE /api/notifications/tokens/clear (Admin)
+ * Cleans up invalid, ghost or obsolete device tokens from DB
+ */
+export const clearDeviceTokens = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { tokenType } = req.query;
+    let query = "DELETE FROM device_tokens";
+
+    if (tokenType === "expo") {
+      query += " WHERE token LIKE 'ExponentPushToken%' OR token LIKE 'ExpoPushToken%'";
+    } else if (tokenType === "ghost") {
+      query += " WHERE token LIKE 'client-%' OR token LIKE '%dummy%' OR token LIKE '%test%'";
+    }
+
+    const [result]: any = await poolConnection.query(query);
+
+    res.status(200).json({
+      success: true,
+      message: `Cleared ${result?.affectedRows || 0} device tokens from database`,
+      affectedRows: result?.affectedRows || 0,
+    });
+  } catch (error: any) {
+    console.error("[notification.controller] clearDeviceTokens error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to clear tokens" });
+  }
+};
+

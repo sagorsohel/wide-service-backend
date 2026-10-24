@@ -1,5 +1,5 @@
 import { eq, isNotNull, isNull, inArray } from "drizzle-orm";
-import { db } from "../db/index.js";
+import { db, poolConnection } from "../db/index.js";
 import { deviceTokens } from "../db/schema.js";
 import { messaging } from "../config/firebase.js";
 
@@ -228,12 +228,14 @@ export async function sendPushNotification(payload: PushPayload) {
   // 4. Clean up invalid & ghost tokens from DB asynchronously
   if (tokensToRemove.length > 0) {
     try {
-      await db.delete(deviceTokens).where(inArray(deviceTokens.token, tokensToRemove));
+      const placeholders = tokensToRemove.map(() => "?").join(",");
+      await poolConnection.query(`DELETE FROM device_tokens WHERE token IN (${placeholders})`, tokensToRemove);
       console.log(`[push] Cleaned up ${tokensToRemove.length} inactive/ghost tokens`);
     } catch (cleanupErr) {
       console.warn("[push] Token cleanup warning:", cleanupErr);
     }
   }
+
 
   return {
     successCount: totalSuccess,

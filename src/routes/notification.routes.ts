@@ -7,6 +7,7 @@ import {
   cancelNotification,
   deleteNotification,
   getPublicNotifications,
+  clearDeviceTokens,
 } from "../controllers/notification.controller.js";
 import {
   authenticateToken,
@@ -25,6 +26,8 @@ router.post("/send", authenticateToken, requireSuperAdmin, sendNotification);
 router.get("/", authenticateToken, requireSuperAdmin, getNotifications);
 router.get("/stats", authenticateToken, requireSuperAdmin, getNotificationStats);
 router.patch("/:id/cancel", authenticateToken, requireSuperAdmin, cancelNotification);
+router.delete("/tokens/clear", authenticateToken, requireSuperAdmin, clearDeviceTokens);
 router.delete("/:id", authenticateToken, requireSuperAdmin, deleteNotification);
+
 
 export default router;
