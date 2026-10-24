@@ -39,7 +39,7 @@ async function sendExpoPushNotifications(
       body,
       data: { ...(data || {}), imageUrl },
       priority: "high",
-      channelId: "default",
+      channelId: "wide_service_v2",
       _displayInForeground: true,
     }));
 
@@ -140,11 +140,13 @@ export async function sendPushNotification(payload: PushPayload) {
           notification: {
             title,
             body,
-            channelId: "default",
+            channelId: "wide_service_v2",
             sound: "default",
-            priority: "high",
+            priority: "max",
+            visibility: "public",
             defaultSound: true,
             defaultVibrateTimings: true,
+            notificationCount: 1,
             ...(imageUrl ? { imageUrl } : {}),
           },
         },
