@@ -56,8 +56,47 @@ export async function ensureUserTablesAndColumns() {
   }
 }
 
+export async function ensureAppReleasesTable() {
+  try {
+    await poolConnection.query(`
+      CREATE TABLE IF NOT EXISTS app_releases (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        platform ENUM('android', 'ios') NOT NULL,
+        version VARCHAR(50) NOT NULL,
+        build_number VARCHAR(50) DEFAULT '1',
+        download_url TEXT NOT NULL,
+        file_size VARCHAR(50) NULL,
+        file_type VARCHAR(50) DEFAULT 'apk',
+        release_notes TEXT NULL,
+        min_os_version VARCHAR(50) DEFAULT 'Android 7.0+ / iOS 14.0+',
+        is_active INT DEFAULT 1 NOT NULL,
+        downloads_count INT DEFAULT 0 NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+        INDEX idx_app_platform_active (platform, is_active)
+      )
+    `);
+
+    // Seed default release entries if none exist
+    const [rows]: any = await poolConnection.query("SELECT COUNT(*) as count FROM app_releases");
+    if (rows[0]?.count === 0) {
+      await poolConnection.query(`
+        INSERT INTO app_releases (platform, version, build_number, download_url, file_size, file_type, release_notes, min_os_version, is_active, downloads_count)
+        VALUES 
+        ('android', '1.0.0', '1', 'https://apiwideservice.widetechbd.com/uploads/apps/wide-service-latest.apk', '45.2 MB', 'apk', 'অফিশিয়াল রিলিজ - লাইভ সার্ভিস বুকিং, রিয়েল-টাইম পুশ নোটিফিকেশন এবং কুইক কল সার্ভিস সুবিধা।', 'Android 7.0+', 1, 142),
+        ('ios', '1.0.0', '1', 'https://apiwideservice.widetechbd.com/uploads/apps/wide-service-latest.ipa', '52.8 MB', 'ipa', 'অফিশিয়াল iOS প্রিভিউ বিল্ড - আল্ট্রা-ফাস্ট সার্চ ও স্মুথ এনিমেশন ইন্টারফেস।', 'iOS 14.0+', 1, 98)
+      `);
+      console.log("[db] Initial app releases seeded successfully!");
+    }
+    console.log("[db] App releases table verified successfully.");
+  } catch (err: any) {
+    console.warn("[db] App releases table setup note:", err.message);
+  }
+}
+
 export async function seedDatabase() {
   await ensureUserTablesAndColumns();
+  await ensureAppReleasesTable();
   console.log("[seed] Checking initial users in database...");
 
   const defaultUsers = [

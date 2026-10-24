@@ -9,10 +9,23 @@ import uploadRoutes from "./routes/upload.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import appReleaseRoutes from "./routes/appRelease.routes.js";
 import { initNotificationScheduler } from "./services/notificationCron.js";
 import { seedDatabase } from "./db/seed.js";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDir = path.join(__dirname, "../uploads");
+const appsUploadDir = path.join(uploadsDir, "apps");
+
+if (!fs.existsSync(appsUploadDir)) {
+  fs.mkdirSync(appsUploadDir, { recursive: true });
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,6 +34,9 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded application files statically
+app.use("/uploads", express.static(uploadsDir));
 
 // Health Check
 app.get("/api/health", (req, res) => {
@@ -50,6 +66,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/app-releases", appReleaseRoutes);
 
 // Root route
 app.get("/", (req, res) => {

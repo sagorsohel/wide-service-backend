@@ -113,6 +113,22 @@ export const notifications = mysqlTable("notifications", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+export const appReleases = mysqlTable("app_releases", {
+  id: serial("id").primaryKey(),
+  platform: mysqlEnum("platform", ["android", "ios"]).notNull(),
+  version: varchar("version", { length: 50 }).notNull(),
+  buildNumber: varchar("build_number", { length: 50 }).default("1"),
+  downloadUrl: text("download_url").notNull(),
+  fileSize: varchar("file_size", { length: 50 }),
+  fileType: varchar("file_type", { length: 50 }).default("apk"),
+  releaseNotes: text("release_notes"),
+  minOsVersion: varchar("min_os_version", { length: 50 }).default("Android 7.0+ / iOS 14.0+"),
+  isActive: int("is_active").default(1).notNull(),
+  downloadsCount: int("downloads_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Category = typeof categories.$inferSelect;
@@ -127,4 +143,6 @@ export type DeviceToken = typeof deviceTokens.$inferSelect;
 export type NewDeviceToken = typeof deviceTokens.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
+export type AppRelease = typeof appReleases.$inferSelect;
+export type NewAppRelease = typeof appReleases.$inferInsert;
 
