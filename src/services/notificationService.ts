@@ -25,6 +25,7 @@ async function sendExpoPushNotifications(
   let successCount = 0;
   let failureCount = 0;
   const invalidTokens: string[] = [];
+  const failureReasons: string[] = [];
 
   const chunks: string[][] = [];
   for (let i = 0; i < tokens.length; i += 100) {
@@ -61,6 +62,8 @@ async function sendExpoPushNotifications(
             successCount++;
           } else {
             failureCount++;
+            const errStr = ticket.details?.error || ticket.message || "Expo delivery failed";
+            failureReasons.push(errStr);
             if (ticket.details?.error === "DeviceNotRegistered") {
               invalidTokens.push(chunk[idx]);
             }
@@ -68,14 +71,16 @@ async function sendExpoPushNotifications(
         });
       } else {
         failureCount += chunk.length;
+        failureReasons.push("Invalid response from Expo Push Service");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("[expo-push] Error sending chunk:", err);
       failureCount += chunk.length;
+      failureReasons.push(err?.message || "Expo network error");
     }
   }
 
-  return { successCount, failureCount, invalidTokens };
+  return { successCount, failureCount, invalidTokens, failureReasons };
 }
 
 export async function sendPushNotification(payload: PushPayload) {
@@ -109,6 +114,7 @@ export async function sendPushNotification(payload: PushPayload) {
   let totalSuccess = 0;
   let totalFailure = 0;
   const tokensToRemove: string[] = [];
+  const allFailureReasons: string[] = [];
 
   // A. Handle Expo Tokens (Expo Go & Expo Managed Clients)
   if (expoTokens.length > 0) {
@@ -116,6 +122,7 @@ export async function sendPushNotification(payload: PushPayload) {
     totalSuccess += expoResult.successCount;
     totalFailure += expoResult.failureCount;
     tokensToRemove.push(...expoResult.invalidTokens);
+    allFailureReasons.push(...(expoResult.failureReasons || []));
   }
 
   // B. Handle Native FCM Tokens (Production / Development APK with Firebase)
@@ -167,7 +174,8 @@ export async function sendPushNotification(payload: PushPayload) {
 
         response.responses.forEach((resp: any, idx: number) => {
           if (!resp.success) {
-            const errCode = resp.error?.code;
+            const errCode = resp.error?.code || resp.error?.message || "fcm-error";
+            allFailureReasons.push(errCode);
             if (
               errCode === "messaging/registration-token-not-registered" ||
               errCode === "messaging/invalid-registration-token"
@@ -176,9 +184,10 @@ export async function sendPushNotification(payload: PushPayload) {
             }
           }
         });
-      } catch (batchErr) {
+      } catch (batchErr: any) {
         console.error("[fcm] Batch sending error:", batchErr);
         totalFailure += batch.length;
+        allFailureReasons.push(batchErr?.message || "FCM batch failure");
       }
     }
   }
@@ -197,8 +206,10 @@ export async function sendPushNotification(payload: PushPayload) {
     successCount: totalSuccess,
     failureCount: totalFailure,
     totalCount: tokens.length,
+    failureReasons: Array.from(new Set(allFailureReasons)).slice(0, 5),
   };
 }
+
 
 export async function registerDeviceToken(token: string, userId?: number | null, platform: string = "unknown") {
   const existing = await db

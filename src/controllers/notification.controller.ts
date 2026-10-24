@@ -193,14 +193,18 @@ export const getNotificationStats = async (req: AuthenticatedRequest, res: Respo
       .from(notifications)
       .where(eq(notifications.status, "pending"));
 
+    const devices = await db.select().from(deviceTokens).limit(20);
+
     res.status(200).json({
       success: true,
       data: {
         totalDevices,
         totalSent,
         totalPending,
+        devices,
       },
     });
+
   } catch (error: any) {
     console.error("[notification.controller] getNotificationStats error:", error);
     res.status(500).json({ success: false, message: error.message || "Failed to fetch stats" });
