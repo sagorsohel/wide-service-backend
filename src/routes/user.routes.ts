@@ -8,10 +8,21 @@ import {
   getRecentServices,
   recordRecent,
   clearRecent,
+  getAllUsers,
+  createUser,
+  updateUserRole,
+  deleteUser,
 } from "../controllers/user.controller.js";
-import { authenticateToken } from "../middleware/auth.js";
+import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
+
+// Admin User Management Routes
+router.get("/", authenticateToken, requireAdmin, getAllUsers);
+router.get("/all", authenticateToken, requireAdmin, getAllUsers);
+router.post("/", authenticateToken, requireAdmin, createUser);
+router.put("/:id/role", authenticateToken, requireAdmin, updateUserRole);
+router.delete("/:id", authenticateToken, requireAdmin, deleteUser);
 
 // Profile Routes
 router.get("/profile", authenticateToken, getProfile);
@@ -30,3 +41,4 @@ router.post("/recent/record", authenticateToken, recordRecent);
 router.delete("/recent", authenticateToken, clearRecent);
 
 export default router;
+

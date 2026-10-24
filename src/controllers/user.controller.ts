@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, count, or, like } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { db, poolConnection } from "../db/index.js";
 import { users, services, userFavorites, userRecentServices, categories } from "../db/schema.js";
 import { AuthenticatedRequest } from "../middleware/auth.js";
@@ -394,5 +395,235 @@ export const clearRecent = async (req: AuthenticatedRequest, res: Response): Pro
   } catch (error: any) {
     console.error("[user.controller] clearRecent error:", error);
     res.status(500).json({ success: false, message: error.message || "Failed to clear history" });
+  }
+};
+
+/**
+ * Admin: Get all users with search, role filter, and aggregate stats
+ * Route: GET /api/users or GET /api/user/all
+ */
+export const getAllUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { page, limit, search, role } = req.query;
+
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    const conditions: any[] = [];
+
+    if (search && typeof search === "string" && search.trim() !== "") {
+      const q = `%${search.trim()}%`;
+      conditions.push(sql`(${users.name} LIKE ${q} OR ${users.phone} LIKE ${q} OR ${users.email} LIKE ${q})`);
+    }
+
+    if (role && typeof role === "string" && role !== "all") {
+      conditions.push(eq(users.role, role as any));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Fetch users matching filter
+    const query = db
+      .select({
+        id: users.id,
+        name: users.name,
+        phone: users.phone,
+        email: users.email,
+        role: users.role,
+        avatar: users.avatar,
+        servicesViewed: users.servicesViewed,
+        detailsViewed: users.detailsViewed,
+        callsClicked: users.callsClicked,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users);
+
+    const countQuery = db.select({ total: count() }).from(users);
+
+    const [userList, [totalRes], statsRes] = await Promise.all([
+      (whereClause ? query.where(whereClause) : query)
+        .orderBy(desc(users.createdAt))
+        .limit(limitNum)
+        .offset(offset),
+      whereClause ? countQuery.where(whereClause) : countQuery,
+      poolConnection.query(
+        `SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN role = 'customer' THEN 1 ELSE 0 END) as customerCount,
+          SUM(CASE WHEN role = 'creator' THEN 1 ELSE 0 END) as creatorCount,
+          SUM(CASE WHEN role IN ('admin', 'superadmin', 'staff') THEN 1 ELSE 0 END) as adminCount
+         FROM users`
+      ),
+    ]);
+
+    const total = Number(totalRes?.total) || 0;
+    const totalPages = Math.ceil(total / limitNum) || 1;
+
+    const statsRow = (statsRes?.[0] as any)?.[0] || {};
+    const stats = {
+      totalUsers: Number(statsRow.total) || 0,
+      customerCount: Number(statsRow.customerCount) || 0,
+      creatorCount: Number(statsRow.creatorCount) || 0,
+      adminCount: Number(statsRow.adminCount) || 0,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: userList,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages,
+      },
+      stats,
+    });
+  } catch (error: any) {
+    console.error("[user.controller] getAllUsers error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to fetch users" });
+  }
+};
+
+/**
+ * Admin: Create a new user account
+ * Route: POST /api/users
+ */
+export const createUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { name, phone, email, password, role } = req.body;
+
+    if (!name || !phone || !password) {
+      res.status(400).json({ success: false, message: "Name, phone and password are required" });
+      return;
+    }
+
+    const assignedRole = role || "customer";
+    if (assignedRole === "superadmin" && req.user?.role !== "superadmin") {
+      res.status(403).json({ success: false, message: "Only Super Admin can assign the Super Admin role" });
+      return;
+    }
+
+    // Check duplicate
+    const existing = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(or(eq(users.phone, phone), email ? eq(users.email, email) : undefined))
+      .limit(1);
+
+    if (existing.length > 0) {
+      res.status(409).json({ success: false, message: "User with this phone or email already exists" });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const insertResult = await db.insert(users).values({
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email && String(email).trim() ? String(email).trim() : null,
+      password: hashedPassword,
+      role: assignedRole,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "User created successfully",
+      data: {
+        id: insertResult[0].insertId,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email || null,
+        role: assignedRole,
+      },
+    });
+  } catch (error: any) {
+    console.error("[user.controller] createUser error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to create user" });
+  }
+};
+
+/**
+ * Admin: Update user role
+ * Route: PUT /api/users/:id/role
+ */
+export const updateUserRole = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = Number(req.params.id);
+    const { role } = req.body;
+
+    const validRoles = ["superadmin", "creator", "admin", "staff", "customer"];
+    if (!validRoles.includes(role)) {
+      res.status(400).json({ success: false, message: "Invalid role specified" });
+      return;
+    }
+
+    if (role === "superadmin" && req.user?.role !== "superadmin") {
+      res.status(403).json({ success: false, message: "Only Super Admin can promote to Super Admin" });
+      return;
+    }
+
+    const [targetUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!targetUser) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    if (targetUser.role === "superadmin" && req.user?.role !== "superadmin") {
+      res.status(403).json({ success: false, message: "Cannot modify a Super Admin user" });
+      return;
+    }
+
+    await db.update(users).set({ role }).where(eq(users.id, userId));
+
+    res.status(200).json({
+      success: true,
+      message: `User role updated to ${role} successfully`,
+      data: { id: userId, role },
+    });
+  } catch (error: any) {
+    console.error("[user.controller] updateUserRole error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to update role" });
+  }
+};
+
+/**
+ * Admin: Delete user
+ * Route: DELETE /api/users/:id
+ */
+export const deleteUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = Number(req.params.id);
+
+    if (req.user?.id === userId) {
+      res.status(400).json({ success: false, message: "You cannot delete your own account" });
+      return;
+    }
+
+    const [targetUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!targetUser) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    if (targetUser.role === "superadmin" && req.user?.role !== "superadmin") {
+      res.status(403).json({ success: false, message: "Cannot delete a Super Admin user" });
+      return;
+    }
+
+    // Clean up related records
+    await poolConnection.query(`DELETE FROM user_favorites WHERE user_id = ?`, [userId]);
+    await poolConnection.query(`DELETE FROM user_recent_services WHERE user_id = ?`, [userId]);
+    await poolConnection.query(`DELETE FROM device_tokens WHERE user_id = ?`, [userId]);
+    await db.delete(users).where(eq(users.id, userId));
+
+    res.status(200).json({
+      success: true,
+      message: "User deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("[user.controller] deleteUser error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to delete user" });
   }
 };
