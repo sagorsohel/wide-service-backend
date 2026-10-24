@@ -182,11 +182,13 @@ export async function sendPushNotification(payload: PushPayload) {
             sound: "default",
             priority: "max",
             visibility: "public",
+            color: "#e0b328",
             defaultSound: true,
             defaultVibrateTimings: true,
             notificationCount: 1,
             ...(imageUrl ? { imageUrl } : {}),
           },
+
         },
         apns: {
           payload: {
